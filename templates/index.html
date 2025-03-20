@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Search Cards</h5>
+                <div class="input-group mb-3">
+                    <input type="text" id="searchInput" class="form-control" placeholder="Enter card name...">
+                    <button class="btn btn-primary" id="searchButton">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+                <div id="searchResults" class="search-results">
+                    <!-- Search results will be displayed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Selected Cards</h5>
+                <div id="selectedCards" class="selected-cards">
+                    <!-- Selected cards will be displayed here -->
+                </div>
+                <button class="btn btn-success w-100" id="optimizeButton" disabled>
+                    <i class="bi bi-calculator"></i> Optimize Purchase
+                </button>
+            </div>
+        </div>
+        
+        <div id="purchasePlans" class="mt-4">
+            <!-- Purchase plans will be displayed here -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedCards = [];
+
+$(document).ready(function() {
+    // Search functionality
+    $('#searchButton').click(function() {
+        const query = $('#searchInput').val();
+        if (!query) return;
+        
+        $.ajax({
+            url: '/api/search',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ query: query }),
+            success: function(response) {
+                displaySearchResults(response.matches);
+            },
+            error: function(xhr, status, error) {
+                console.error('Search error:', error);
+                alert('Error searching for cards. Please try again.');
+            }
+        });
+    });
+
+    // Optimize purchase
+    $('#optimizeButton').click(function() {
+        if (selectedCards.length === 0) return;
+        
+        $.ajax({
+            url: '/api/optimize',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ cards: selectedCards }),
+            success: function(response) {
+                displayPurchasePlans(response.plans);
+            },
+            error: function(xhr, status, error) {
+                console.error('Optimization error:', error);
+                alert('Error optimizing purchase. Please try again.');
+            }
+        });
+    });
+});
+
+function displaySearchResults(cards) {
+    const resultsDiv = $('#searchResults');
+    resultsDiv.empty();
+    
+    cards.forEach(card => {
+        const cardElement = $(`
+            <div class="card mb-2">
+                <div class="card-body">
+                    <h6 class="card-title">${card.name}</h6>
+                    <p class="card-text">
+                        <small class="text-muted">
+                            ${card.type} | ${card.attribute} | Level ${card.level}
+                        </small>
+                    </p>
+                    <button class="btn btn-sm btn-outline-primary add-card" 
+                            data-card='${JSON.stringify(card)}'>
+                        <i class="bi bi-plus-circle"></i> Add to List
+                    </button>
+                </div>
+            </div>
+        `);
+        
+        cardElement.find('.add-card').click(function() {
+            const cardData = $(this).data('card');
+            addCardToList(cardData);
+        });
+        
+        resultsDiv.append(cardElement);
+    });
+}
+
+function addCardToList(card) {
+    if (!selectedCards.some(c => c.name === card.name)) {
+        selectedCards.push(card);
+        updateSelectedCardsDisplay();
+        $('#optimizeButton').prop('disabled', false);
+    }
+}
+
+function removeCardFromList(cardName) {
+    selectedCards = selectedCards.filter(card => card.name !== cardName);
+    updateSelectedCardsDisplay();
+    $('#optimizeButton').prop('disabled', selectedCards.length === 0);
+}
+
+function updateSelectedCardsDisplay() {
+    const selectedDiv = $('#selectedCards');
+    selectedDiv.empty();
+    
+    selectedCards.forEach(card => {
+        const cardElement = $(`
+            <div class="card mb-2">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0">${card.name}</h6>
+                        <button class="btn btn-sm btn-outline-danger remove-card" 
+                                data-card-name="${card.name}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+        cardElement.find('.remove-card').click(function() {
+            const cardName = $(this).data('card-name');
+            removeCardFromList(cardName);
+        });
+        
+        selectedDiv.append(cardElement);
+    });
+}
+
+function displayPurchasePlans(plans) {
+    const plansDiv = $('#purchasePlans');
+    plansDiv.empty();
+    
+    plans.forEach((plan, index) => {
+        const planElement = $(`
+            <div class="card purchase-plan">
+                <div class="card-body">
+                    <h5 class="card-title">Purchase Plan ${index + 1}</h5>
+                    <p class="card-text">
+                        <strong>Total Cost:</strong> NT$ ${plan.total_cost.toFixed(2)}
+                    </p>
+                    <div class="sellers-container">
+                        ${plan.sellers.map(seller => `
+                            <div class="seller-section">
+                                <h6>${seller.name}</h6>
+                                <p class="mb-1">
+                                    <strong>Subtotal:</strong> NT$ ${seller.subtotal.toFixed(2)}<br>
+                                    <strong>Shipping:</strong> NT$ ${seller.shipping_fee.toFixed(2)}
+                                </p>
+                                <div class="card-list">
+                                    ${seller.cards.map(card => `
+                                        <div class="card mb-1">
+                                            <div class="card-body py-2">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span>${card.name}</span>
+                                                    <span>NT$ ${card.price.toFixed(2)}</span>
+                                                </div>
+                                                <a href="${card.url}" target="_blank" class="btn btn-sm btn-primary mt-1">
+                                                    <i class="bi bi-cart"></i> Buy
+                                                </a>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `);
+        
+        plansDiv.append(planElement);
+    });
+}
+</script>
+{% endblock %} 
